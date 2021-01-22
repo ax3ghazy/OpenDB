@@ -1,8 +1,9 @@
-///////////////////////////////////////////////////////////////////////////////
-// BSD 3-Clause License
+/////////////////////////////////////////////////////////////////////////////
 //
-// Copyright (c) 2019, Nefelus Inc
+// Copyright (c) 2019, OpenROAD
 // All rights reserved.
+//
+// BSD 3-Clause License
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
@@ -29,43 +30,25 @@
 // CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
+//
+///////////////////////////////////////////////////////////////////////////////
 
 #pragma once
 
 #include "odb.h"
-namespace utl{
-  class Logger;
-}
+#include "db.h"
+#include <stdio.h>
+#include <unistd.h>
+
+#include <list>
+#include <string>
+
 namespace odb {
 
-class defout_impl;
-class dbNet;
-class dbBlock;
-
-class defout
+class cdl
 {
-  defout_impl* _writer;
-
- public:
-  enum Version
-  {
-    DEF_5_3,
-    DEF_5_4,
-    DEF_5_5,
-    DEF_5_6,
-    DEF_5_8
-  };
-
-  defout(utl::Logger* logger);
-  ~defout();
-
-  void setUseLayerAlias(bool value);
-  void setUseNetInstIds(bool value);
-  void setUseMasterIds(bool value);
-  void selectNet(dbNet* net);
-  void setVersion(Version v);  // default is 5.8
-
-  bool writeBlock(dbBlock* block, const char* def_file);
+  public:
+    static bool dumpNetLists(dbBlock* block, const char* fileName, bool includeFillers=0);
 };
 
 }  // namespace odb
