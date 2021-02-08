@@ -20,7 +20,7 @@ message(STATUS "spdlog: ${spdlog_VERSION}")
 # Create a library 
 ############################################################
 add_library( utility
-  SHARED
+  STATIC
   src/Logger.cpp
   src/MakeLogger.cpp
 )
@@ -35,3 +35,10 @@ target_link_libraries( utility
   PUBLIC
   spdlog::spdlog
 )
+
+install (
+  TARGETS utility
+  LIBRARY DESTINATION lib
+)
+
+set_property(TARGET utility PROPERTY POSITION_INDEPENDENT_CODE ON)
