@@ -36,8 +36,8 @@ swig_link_libraries(opendbpy
 
 # Files to install with Python
 set(PYTHON_INSTALL_FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/opendbpy.py
-    ${CMAKE_CURRENT_BINARY_DIR}/_opendbpy.so
+    opendbpy.py
+    _opendbpy.so
 )
 
 # Configure setup.py and copy to output directory
