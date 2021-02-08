@@ -8,6 +8,8 @@ cmake_minimum_required(VERSION 3.14...3.16)
 project(OpenDB VERSION 0.0.1
   LANGUAGES CXX)
 
+set(CMAKE_CXX_STANDARD 17)
+
 # Configure build version
 configure_file (
     "${PROJECT_SOURCE_DIR}/include/opendb/version.hh.in"
@@ -22,6 +24,7 @@ find_package(Boost)
 ################################# Targets ##################################
 ############################################################################
 
+add_subdirectory(src/utility)
 add_subdirectory(src/db)
 add_subdirectory(src/defin)
 add_subdirectory(src/defout)
