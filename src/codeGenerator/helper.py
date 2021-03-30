@@ -1,8 +1,4 @@
-import re
-import json
-
-
-comparable = [
+_comparable = [
     'int',
     'uint',
     'unint_32t',
@@ -20,8 +16,25 @@ comparable = [
     'char',
     'Rect'
 ]
+std = [
+    'int',
+    'uint',
+    'unint_32t',
+    'bool',
+    'string',
+    'std::string',
+    'float',
+    'short',
+    'double',
+    'long',
+    'long long',
+    'long double',
+    'char *',
+    'char*',
+    'char',
+]
 
-removable = [
+_removable = [
     'unsigned',
     'static',
     'const'
@@ -32,7 +45,7 @@ def _stem(s):
     src = s.split(' ')
     target = []
     for item in src:
-        if item not in removable:
+        if item not in _removable:
             target.append(item)
     return ' '.join([str(elem) for elem in target])
 
@@ -45,31 +58,19 @@ def getStruct(name, structs):
 
 
 def components(structs, name, _type):
-    if _stem(_type) in comparable or isRef(_type):
+    if(_stem(_type) in _comparable or isRef(_type)):
         return [name]
-    idx = 0
-    absType = _type.rstrip(' *')
     struct = getStruct(_type.rstrip(' *'), structs)
     if struct is not None:
         ret = []
         for field in struct['fields']:
             target = components(structs, field['name'], field['type'])
             if _type.find('*') == -1:
-                ret.extend([name+'.'+str(elem) for elem in target])
+                ret.extend([name + '.' + str(elem) for elem in target])
             else:
-                ret.extend([name+'->'+str(elem) for elem in target])
+                ret.extend([name + '->' + str(elem) for elem in target])
         return ret
     return []
-
-
-def addOnceToList(src, target):
-    if isinstance(src, list):
-        for obj in src:
-            if obj not in target:
-                target.insert(0, obj)
-    elif src not in target:
-        target.add(0, src)
-    return target
 
 
 def addOnceToDict(src, target):
@@ -87,17 +88,17 @@ def isBitFields(field, structs):
     struct = getStruct(field['type'], structs)
     if struct is None:
         return False
-    for field in struct['fields']:
-        if isBitFields(field, structs):
+    for struct_field in struct['fields']:
+        if isBitFields(struct_field, structs):
             return True
     return False
 
 
 def getFunctionalName(name):
     if name.islower():
-        return ''.join([n.capitalize() for n in name.split('_')])
-    else:
-        return name
+        return ''.join([n.capitalize()
+                        for n in name.replace("tbl", "table").split('_')])
+    return name
 
 
 def getClassIndex(schema, name):
@@ -114,13 +115,12 @@ def getTableName(name):
 
 
 def isRef(type_name):
-    return True if type_name.startswith("dbId<") and type_name[-1] == '>' \
-        else False
+    return type_name.startswith("dbId<") and type_name[-1] == '>'
 
 
 def isHashTable(type_name):
-    return True if type_name.startswith("dbHashTable<") and \
-        type_name[-1] == '>' else False
+    return type_name.startswith("dbHashTable<") and \
+        type_name[-1] == '>'
 
 
 def getHashTableType(type_name):
@@ -130,19 +130,29 @@ def getHashTableType(type_name):
     return type_name[12:-1] + "*"
 
 
-def isTemplateType(type_name):
+def isPassByRef(type_name):
+    return type_name.find("dbVector") == 0
+
+def _isTemplateType(type_name):
     openBracket = type_name.find("<")
     if openBracket == -1:
         return False
 
     closedBracket = type_name.find(">")
 
-    return False if closedBracket == -1 or closedBracket < openBracket \
-        else True
+    return closedBracket != -1 and closedBracket > openBracket
 
+def _isTemplateType(type_name):
+    openBracket = type_name.find("<")
+    if openBracket == -1:
+        return False
+
+    closedBracket = type_name.find(">")
+
+    return closedBracket >= openBracket
 
 def getTemplateType(type_name):
-    if not isTemplateType(type_name):
+    if not _isTemplateType(type_name):
         return None
     numBrackets = 1
 
@@ -156,7 +166,7 @@ def getTemplateType(type_name):
             if numBrackets == 0:
                 closedBracket = i
 
-    return type_name[openBracket+1:closedBracket]
+    return type_name[openBracket + 1:closedBracket]
 
 
 def getRefType(type_name):

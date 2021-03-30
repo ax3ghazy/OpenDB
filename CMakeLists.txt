@@ -16,10 +16,6 @@ configure_file (
     "${PROJECT_BINARY_DIR}/include/opendb/version.hh"
 )
 
-find_package(TCL)
-
-find_package(Boost)
-
 ############################################################################
 ################################# Targets ##################################
 ############################################################################
@@ -36,24 +32,16 @@ add_subdirectory(src/zutil)
 add_subdirectory(src/zlib)
 add_subdirectory(src/tm)
 add_subdirectory(src/cdl)
-add_subdirectory(tests/cpp)
+add_subdirectory(test/cpp)
 ############################################################################
 ################################# SWIG #####################################
 ############################################################################
 
-find_package(SWIG 3.0 REQUIRED)
-
 include(${SWIG_USE_FILE})
 
-option(BUILD_PYTHON "Build Python SWIG module" ON)
-if(BUILD_PYTHON)
-    add_subdirectory(src/swig/python)
-endif()
-
-option(BUILD_TCL "Build TCL SWIG module" ON)
-if(NOT OPENROAD_BUILD AND BUILD_TCL)
-    add_subdirectory(src/swig/tcl)
-endif()
+add_subdirectory(src/swig/common)
+add_subdirectory(src/swig/python)
+add_subdirectory(src/swig/tcl)
 
 ############################################################################
 ############################### DOXYGEN ####################################

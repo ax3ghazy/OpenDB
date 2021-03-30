@@ -33,8 +33,8 @@
 #pragma once
 
 #include "odb.h"
-namespace utl{
-  class Logger;
+namespace utl {
+class Logger;
 }
 namespace odb {
 
@@ -74,7 +74,6 @@ enum dbObjectType
   dbITermObj,
   dbBoxObj,
   dbViaObj,
-  dbGCellGridObj,
   dbTrackGridObj,
   dbObstructionObj,
   dbBlockageObj,
@@ -89,12 +88,22 @@ enum dbObjectType
   dbRegionObj,
   dbHierObj,
   dbBPinObj,
-  // Generator Code Begin 1
+  // Generator Code Begin DbObjectType
+  dbTechLayerObj,
   dbTechLayerSpacingEolRuleObj,
+  dbTechLayerMinStepRuleObj,
+  dbTechLayerCornerSpacingRuleObj,
+  dbTechLayerSpacingTablePrlRuleObj,
+  dbTechLayerCutClassRuleObj,
+  dbTechLayerCutSpacingRuleObj,
+  dbTechLayerCutSpacingTableOrthRuleObj,
+  dbTechLayerCutSpacingTableDefRuleObj,
+  dbTechLayerCutEnclosureRuleObj,
   dbModuleObj,
   dbModInstObj,
   dbGroupObj,
-  // Generator Code End 1
+  dbGCellGridObj,
+  // Generator Code End DbObjectType
 
   // Lib Objects
   dbLibObj,
@@ -107,7 +116,6 @@ enum dbObjectType
 
   // Tech Objects
   dbTechObj,
-  dbTechLayerObj,
   dbTechViaObj,
   dbTechNonDefaultRuleObj,  // also a design object
   dbTechLayerRuleObj,       // also a design object
@@ -131,18 +139,18 @@ class dbDatabase;
 class dbObject
 {
  public:
-  dbObjectType     getObjectType() const;
-  dbDatabase*      getDb() const;
-  uint             getId() const;
+  dbObjectType getObjectType() const;
+  dbDatabase* getDb() const;
+  uint getId() const;
   static const int max_name_length = 256;
-  void             getDbName(char name[max_name_length]) const;
-  const char*      getObjName() const;
+  void getDbName(char name[max_name_length]) const;
+  const char* getObjName() const;
 
-  static dbObject*   resolveDbName(dbDatabase* db, const char* name);
+  static dbObject* resolveDbName(dbDatabase* db, const char* name);
   static const char* getObjName(dbObjectType type);
   // These are not intended for client use as the returned class is
   // not exported.  They are for internal db convenience.
-  _dbObject*       getImpl();
+  _dbObject* getImpl();
   const _dbObject* getImpl() const;
 
  protected:

@@ -34,8 +34,12 @@
 
 #include <string.h>
 
+#include <string>
+
 #include "ZException.h"
+#include "map"
 #include "odb.h"
+#include "tuple"
 
 namespace odb {
 
@@ -44,9 +48,9 @@ class _dbDatabase;
 class dbOStream
 {
   _dbDatabase* _db;
-  FILE*        _f;
-  double       _lef_area_factor;
-  double       _lef_dist_factor;
+  FILE* _f;
+  double _lef_area_factor;
+  double _lef_dist_factor;
 
   void write_error()
   {
@@ -105,6 +109,14 @@ class dbOStream
     return *this;
   }
 
+  dbOStream& operator<<(uint64_t c)
+  {
+    int n = fwrite(&c, sizeof(c), 1, _f);
+    if (n != 1)
+      write_error();
+    return *this;
+  }
+
   dbOStream& operator<<(unsigned int c)
   {
     int n = fwrite(&c, sizeof(c), 1, _f);
@@ -152,10 +164,49 @@ class dbOStream
     return *this;
   }
 
+  template <class T1, class T2>
+  dbOStream& operator<<(const std::pair<T1, T2>& p)
+  {
+    *this << p.first;
+    *this << p.second;
+    return *this;
+  }
+
+  template <size_t I = 0, typename... Ts>
+  constexpr dbOStream& operator<<(const std::tuple<Ts...>& tup)
+  {
+    if constexpr (I == sizeof...(Ts)) {
+      return *this;
+    } else {
+      *this << std::get<I>(tup);
+      return ((*this).operator<<<I + 1>(tup));
+    }
+  }
+
+  template <class T1, class T2>
+  dbOStream& operator<<(const std::map<T1, T2>& m)
+  {
+    uint sz = m.size();
+    *this << sz;
+    for (auto const& [key, val] : m) {
+      *this << key;
+      *this << val;
+    }
+    return *this;
+  }
+
+  dbOStream& operator<<(std::string s)
+  {
+    char* tmp = strdup(s.c_str());
+    *this << tmp;
+    free((void*) tmp);
+    return *this;
+  }
+
   void markStream()
   {
     int marker = ftell(_f);
-    int magic  = 0xCCCCCCCC;
+    int magic = 0xCCCCCCCC;
     *this << magic;
     *this << marker;
   }
@@ -167,10 +218,10 @@ class dbOStream
 
 class dbIStream
 {
-  FILE*        _f;
+  FILE* _f;
   _dbDatabase* _db;
-  double       _lef_area_factor;
-  double       _lef_dist_factor;
+  double _lef_area_factor;
+  double _lef_dist_factor;
 
   void read_error()
   {
@@ -235,6 +286,14 @@ class dbIStream
     return *this;
   }
 
+  dbIStream& operator>>(uint64_t& c)
+  {
+    int n = fread(&c, sizeof(c), 1, _f);
+    if (n != 1)
+      read_error();
+    return *this;
+  }
+
   dbIStream& operator>>(unsigned int& c)
   {
     int n = fread(&c, sizeof(c), 1, _f);
@@ -275,7 +334,7 @@ class dbIStream
     if (l == 0)
       c = NULL;
     else {
-      c     = (char*) malloc(l);
+      c = (char*) malloc(l);
       int n = fread(c, l, 1, _f);
       if (n != 1)
         read_error();
@@ -284,10 +343,52 @@ class dbIStream
     return *this;
   }
 
+  template <class T1, class T2>
+  dbIStream& operator>>(std::pair<T1, T2>& p)
+  {
+    *this >> p.first;
+    *this >> p.second;
+    return *this;
+  }
+  template <class T1, class T2>
+  dbIStream& operator>>(std::map<T1, T2>& m)
+  {
+    uint sz;
+    *this >> sz;
+    for (uint i = 0; i < sz; i++) {
+      T1 key;
+      T2 val;
+      *this >> key;
+      *this >> val;
+      m[key] = val;
+    }
+    return *this;
+  }
+
+  template <size_t I = 0, typename... Ts>
+  constexpr dbIStream& operator>>(std::tuple<Ts...>& tup)
+  {
+    if constexpr (I == sizeof...(Ts)) {
+      return *this;
+    } else {
+      *this >> std::get<I>(tup);
+      return ((*this).operator>><I + 1>(tup));
+    }
+  }
+
+  dbIStream& operator>>(std::string& s)
+  {
+    char* tmp;
+    *this >> tmp;
+    s = std::string(tmp);
+    free((void*) tmp);
+    return *this;
+  }
+
   void checkStream()
   {
     int marker = ftell(_f);
-    int magic  = 0xCCCCCCCC;
+    int magic = 0xCCCCCCCC;
     int smarker;
     int smagic;
     *this >> smagic;
@@ -301,5 +402,3 @@ class dbIStream
 };
 
 }  // namespace odb
-
-

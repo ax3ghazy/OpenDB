@@ -1,13 +1,15 @@
 #!/usr/bin/python3
 
-from jinja2 import Template, Environment, FileSystemLoader
-import subprocess
-from subprocess import call, run
+from subprocess import call
 import argparse
-from helper import *
-from parser import Parser
 import os
 import shutil
+import json
+from jinja2 import Environment, FileSystemLoader
+from helper import addOnceToDict, getClassIndex, getTableName, isBitFields, \
+    getStruct, isRef, getRefType, isHashTable, getHashTableType, \
+    getTemplateType, components, getFunctionalName, isPassByRef, std
+from parser import Parser
 
 parser = argparse.ArgumentParser(description='Code generator')
 parser.add_argument('--json', action='store', required=True)
@@ -33,7 +35,7 @@ env = Environment(
 
 # Creating Directory for generated files
 
-if(os.path.exists('generated')):
+if os.path.exists('generated'):
     shutil.rmtree('generated')
 os.mkdir('generated')
 
@@ -80,7 +82,10 @@ if "relations" in schema:
             raise NameError('Class {} in relations is not found'
                             .format(relation['second']))
         inParentField = {}
-        inParentField['name'] = getTableName(relation['second'])
+        if 'tbl_name' in relation:
+            inParentField['name'] = relation["tbl_name"]
+        else:
+            inParentField['name'] = relation["tbl_name"] = getTableName(relation['second'])
         inParentField['type'] = relation['second']
         inParentField['table'] = True
         inParentField['dbSetGetter'] = True
@@ -100,6 +105,24 @@ if "relations" in schema:
 
         if 'dbTable' not in schema['classes'][parent]['classes']:
             schema['classes'][parent]['classes'].append('dbTable')
+        if relation.get('hash', False):
+            inParentHashField = {}
+
+            inParentHashField['name'] = inParentField['name'][:-4] + "hash_"
+            inParentHashField['type'] = "dbHashTable<_" + \
+                relation['second'] + ">"
+            inParentHashField['components'] = [inParentHashField['name']]
+            inParentHashField['table_name'] = inParentField['name']
+            inParentHashField['flags'] = [
+                "cmp", "serial", "diff", "no-set", "get"]
+            schema['classes'][parent]['fields'].append(inParentHashField)
+            if 'dbHashTable.h' not in schema['classes'][parent]['h_includes']:
+                schema['classes'][parent]['h_includes'].append("dbHashTable.h")
+            inChildNextEntry = {"name": "_next_entry"}
+            inChildNextEntry['type'] = "dbId<_" + relation['second'] + ">"
+            inChildNextEntry['flags'] = [
+                "cmp", "serial", "diff", "private", "no-deep"]
+            schema['classes'][child]['fields'].append(inChildNextEntry)
 
 
 for klass in schema['classes']:
@@ -112,6 +135,9 @@ for klass in schema['classes']:
     klass['hasTables'] = False
     flag_num_bits = 0
     for field in klass['fields']:
+        if field['type'] == 'bit':
+            field['type'] = 'bool'
+            field['bits'] = 1
         if 'bits' in field:
             struct['fields'].append(field)
             flag_num_bits += int(field['bits'])
@@ -122,9 +148,19 @@ for klass in schema['classes']:
         field['isRef'] = isRef(field['type']) \
             if field.get('parent') is not None else False
         field['refType'] = getRefType(field['type'])
+        # refTable is the table name from which the getter extracts the pointer to dbObject
+        if field['isRef']:
+            field['refTable'] = getTableName(field['refType'].replace('*',''))
+            # checking if there is a defined relation between parent and refType for extracting table name
+            for relation in schema['relations']:
+                if relation['first'] == field['parent'] and relation['second'] == field['refType'].replace('*',''):
+                    field['refTable'] = relation['tbl_name']
         field['isHashTable'] = isHashTable(field['type'])
         field['hashTableType'] = getHashTableType(field['type'])
-
+        field['isPassByRef'] = isPassByRef(field['type'])
+        if 'argument' not in field:
+            field['argument'] = field['name'].strip('_')
+        field.setdefault('flags',[])
         if 'private' in field['flags']:
             field['flags'].append('no-set')
             field['flags'].append('no-get')
@@ -141,8 +177,7 @@ for klass in schema['classes']:
             tmp = getTemplateType(tmp)
 
         if templateClassName is not None:
-            if templateClassName not in klass['classes'] and \
-               klass['name'] != templateClassName[1:]:
+            if templateClassName not in klass['classes'] and templateClassName not in std and "no-template" not in field["flags"] and klass['name'] != templateClassName[1:]:
                 klass['classes'].append(templateClassName)
         ####
         ####
@@ -154,6 +189,8 @@ for klass in schema['classes']:
             else:
                 field['functional_name'] = '{}s'.format(field['type'])
             field['components'] = [field['name']]
+        elif field['isHashTable']:
+            field['functional_name'] = '{}s'.format(field['type'][2:])
         else:
             field['functional_name'] = getFunctionalName(field['name'])
             field['components'] = components(klass['structs'], field['name'],
@@ -171,13 +208,18 @@ for klass in schema['classes']:
         elif field['isHashTable']:
             if 'no-set' not in field['flags']:
                 field.append('no-set')
-            field['setterArgumentType'] = \
-                field['getterReturnType'] = \
-                field['hashTableType']
+            field['setterArgumentType'] = field['getterReturnType'] = field['hashTableType'].replace(
+                "_", "")
             field['getterFunctionName'] = "find" + \
-                field['setterArgumentType'][3:-1]
+                field['setterArgumentType'][2:-1]
         elif 'bits' in field and field['bits'] == 1:
             field['setterArgumentType'] = field['getterReturnType'] = 'bool'
+        elif field['isPassByRef']:
+            field['setterArgumentType'] = field['getterReturnType'] = field['type'].replace(
+                'dbVector', "std::vector")
+        elif field['type'] == 'char *':
+            field['setterArgumentType'] = field['type'];
+            field['getterReturnType'] = 'const char *'
         else:
             field['setterArgumentType'] = field['getterReturnType'] = \
                 field['type']
@@ -185,28 +227,30 @@ for klass in schema['classes']:
     klass['fields'] = [field for field in klass['fields']
                        if 'bits' not in field]
 
+    klass['fields'] = [field for field in klass['fields'] if 'bits' not in field]
+    total_num_bits = flag_num_bits
     if flag_num_bits > 0 and flag_num_bits % 32 != 0:
         spare_bits_field = {
-            "name": "_spare_bits",
+            "name": "spare_bits_",
             "type": "uint",
             "bits": 32 - (flag_num_bits % 32),
             "flags": ["no-cmp", "no-set", "no-get", "no-serial", "no-diff"]
         }
+        total_num_bits += spare_bits_field['bits']
         struct['fields'].append(spare_bits_field)
 
     if len(struct['fields']) > 0:
 
-        struct['in_class'] = True,
-        struct['in_class_name'] = '_flags'
+        struct['in_class'] = True
+        struct['in_class_name'] = 'flags_'
         klass['structs'].insert(0, struct)
         klass['fields'].insert(0, {
-            'name': '_flags',
+            'name': 'flags_',
             'type': struct['name'],
-            'components': components(klass['structs'],
-                                     '_flags',
-                                     struct['name']),
+            'components': components(klass['structs'], 'flags_', struct['name']),
             'bitFields': True,
             'isStruct': True,
+            'numBits': total_num_bits,
             'flags': ["no-cmp", "no-set", "no-get", "no-serial", "no-diff"]
         })
 
@@ -215,6 +259,9 @@ for klass in schema['classes']:
         template = env.get_template(template_file)
         text = template.render(klass=klass, schema=schema)
         fileType = template_file.split('.')
+        # for field in klass['fields']:
+        #     if field['isHashTable']:
+        #         print(field)
         out_file = '{}.{}'.format(klass['name'], template_file.split('.')[1])
         toBeMerged.append(out_file)
         out_file = os.path.join('generated', out_file)
@@ -253,13 +300,13 @@ for item in toBeMerged:
         p = Parser(os.path.join(dr, item))
         if item == 'CMakeLists.txt':
             p.setCommentStr('#')
-        assert(p.parseUserCode())
-        assert(p.cleanCode())
-        assert(p.parseSourceCode(os.path.join('generated', item)))
-        assert(p.writeInFile(os.path.join(dr, item)))
+        assert p.parseUserCode()
+        assert p.cleanCode()
+        assert p.parseSourceCode(os.path.join('generated', item))
+        assert p.writeInFile(os.path.join(dr, item))
     else:
         with open(os.path.join('generated', item), 'r') as read, \
-             open(os.path.join(dr, item), 'w') as out:
+                open(os.path.join(dr, item), 'w') as out:
             text = read.read()
             out.write(text)
     if item != 'CMakeLists.txt':
